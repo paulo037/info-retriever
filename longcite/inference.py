@@ -24,14 +24,14 @@ class LongCiteModel():
         
         return response, history
 
-    def query_longcite(self, context, query, tokenizer, max_input_length=4096, max_new_tokens=1024, temperature=0.95):
+    def query_longcite(self,  query, tokenizer, max_input_length=4096, max_new_tokens=1024, temperature=0.95):
 
         def get_prompt(question):
             
             sentences = TextRetriever.search(question)
 
             splited_context =  "".join([f"<C{i}>"+s['content'] for i, s in enumerate(sentences)])
-            print(splited_context)
+
 
             # Construir o prompt final com o contexto recuperado
             prompt = '''Please answer the user's question based on the following document. '''+\
@@ -59,6 +59,8 @@ class LongCiteModel():
                         merged_citations[-1].update({
                             "end_sentence_idx": ed,
                             'end_char_idx': sents[ed]['end'],
+                            'name': sents[ed]['name'],
+                            'url': sents[ed]['url'],
                             'cite': ''.join([x['content'] for x in sents[merged_citations[-1]['start_sentence_idx']:ed+1]]),
                         })
                     else:
@@ -67,6 +69,8 @@ class LongCiteModel():
                             "end_sentence_idx": ed,
                             "start_char_idx":  sents[st]['start'],
                             'end_char_idx': sents[ed]['end'],
+                            'name': sents[ed]['name'],
+                            'url': sents[ed]['url'],
                             'cite': ''.join([x['content'] for x in sents[st:ed+1]]),
                         })
                 except:
@@ -146,5 +150,4 @@ class LongCiteModel():
 
         result = postprocess(output, sents, splited_context)
         
-        print(result)
         return result

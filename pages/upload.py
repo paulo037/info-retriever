@@ -1,5 +1,5 @@
 import streamlit as st
-from PyPDF2 import PdfReader
+
 from longcite import TextRetriever
 import fitz
 st.set_page_config(layout="wide", page_title="LongCite - Upload")
@@ -50,7 +50,6 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Initialize session state for storing uploaded documents
 if 'uploaded_docs' not in st.session_state:
     st.session_state['uploaded_docs'] = {}
 
@@ -59,16 +58,15 @@ with col2:
     uploaded_file = st.file_uploader("Upload a document (supported types: pdf, txt, md, py)")
 
 if uploaded_file:
-    # Convert the uploaded file to text
+
     content = convert_to_txt(uploaded_file)
     
     if content:
         
-
         col1, col2, col3 = st.columns([1, 1, 1])
         with col2:
             if st.button("Upload", use_container_width=True):
-                # Upload to TextRetriever
+              
                 for filename, content in st.session_state['uploaded_docs'].items():
                     TextRetriever.add_document({
                         "name": filename,
@@ -76,14 +74,10 @@ if uploaded_file:
                         "url": f"file:///{filename}"
                     })
                 st.success("✅ file successfully uploaded!")
-                
-                # Clear session state after upload
                 st.session_state['uploaded_docs'].clear()
         
-        # Store the content in session state
         st.session_state['uploaded_docs'][uploaded_file.name] = content
 
-        # Show a preview if the checkbox is checked
         show_preview = st.checkbox("Show Preview", value=True)
         if show_preview:
             st.text_area("Document Content", content, height=270)

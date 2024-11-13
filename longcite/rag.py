@@ -7,41 +7,53 @@ from rank_bm25 import BM25Okapi
 from nltk.tokenize import word_tokenize
 import nltk
 nltk.download('punkt')
-
+nltk.download('punkt_tab')
 
 
 class TextRetriever:
     client: PersistentClient = PersistentClient(path='db/chroma_db')
-    conn: sqlite3.Connection = sqlite3.connect('db/rag_db.sqlite3', check_same_thread=False)
+    conn: sqlite3.Connection = sqlite3.connect(
+        'db/rag_db.sqlite3', check_same_thread=False)
     cur: sqlite3.Cursor = conn.cursor()
     bm25: BM25Okapi
-    documents: dict 
+    documents: dict
     collection: Collection
 
-    @staticmethod  
+    @staticmethod
     def init_bm25():
         with TextRetriever.conn:
             TextRetriever.cur.execute("SELECT * FROM document")
-            TextRetriever.documents = [{"id": d[0], "name": d[1], "content": d[2], "url": d[3]} for d in TextRetriever.cur.fetchall()]
-        
+            TextRetriever.documents = [
+                {"id": d[0], "name": d[1], "content": d[2], "url": d[3]} for d in TextRetriever.cur.fetchall()]
+
         contents = [d['content'] for d in TextRetriever.documents]
         tokenized_corpus = [word_tokenize(doc) for doc in contents]
         if tokenized_corpus:
-          TextRetriever.bm25 = BM25Okapi(tokenized_corpus)
-        
-        
+            TextRetriever.bm25 = BM25Okapi(tokenized_corpus)
+
     @staticmethod
     def init():
-        TextRetriever.cur.execute('''CREATE TABLE IF NOT EXISTS sentence (id INTEGER PRIMARY KEY AUTOINCREMENT, document_id TEXT, chunk_id TEXT, content TEXT, start INTEGER, end INTEGER)''')
-        TextRetriever.cur.execute('''CREATE TABLE IF NOT EXISTS document (id TEXT PRIMARY KEY, name TEXT, content TEXT, url TEXT)''')
+        TextRetriever.cur.execute(
+            '''CREATE TABLE IF NOT EXISTS sentence (id INTEGER PRIMARY KEY AUTOINCREMENT, document_id TEXT, chunk_id TEXT, content TEXT, start INTEGER, end INTEGER, url TEXT, name)''')
+        TextRetriever.cur.execute(
+            '''CREATE TABLE IF NOT EXISTS document (id TEXT PRIMARY KEY, name TEXT, content TEXT, url TEXT)''')
         TextRetriever.conn.commit()
-        TextRetriever.collection = TextRetriever.client.get_or_create_collection("chunks")
+        TextRetriever.collection = TextRetriever.client.get_or_create_collection(
+            "chunks")
         TextRetriever.init_bm25()
 
     @staticmethod
-    def get_relevant_docs(self, query, min_doc_score=3):
+    def get_relevant_docs(query, min_doc_score=3):
+        print(query)
         scores = TextRetriever.bm25.get_scores(word_tokenize(query))
-        relevant_docs = [d['id'] for d, s in zip(TextRetriever.documents, scores) if s >= min_doc_score]
+        print(scores)
+        relevant_docs = [d['id'] for d, s in zip(
+            TextRetriever.documents, scores) if s >= min_doc_score]
+        if not relevant_docs:
+            sorted_docs = sorted(
+                zip(TextRetriever.documents, scores), key=lambda x: x[1], reverse=True)
+            relevant_docs = [d['id'] for d, s in sorted_docs[:2]]
+
         return relevant_docs
 
     @staticmethod
@@ -82,14 +94,15 @@ class TextRetriever:
                     )
                     pos = ed
                 return res
-        
+
         doc_id = str(uuid.uuid4())
-        TextRetriever.cur.execute("INSERT INTO document (id, name, content, url) VALUES (?, ?, ?, ?)", (doc_id, document['name'], document['content'], document['url']))
+        TextRetriever.cur.execute("INSERT INTO document (id, name, content, url) VALUES (?, ?, ?, ?)", (
+            doc_id, document['name'], document['content'], document['url']))
         TextRetriever.conn.commit()
         TextRetriever.init_bm25()
-        
+
         context = document['content']
-        sentences = text_split_by_punctuation(context, return_dict=True)    
+        sentences = text_split_by_punctuation(context, return_dict=True)
         chunks = []
         for i in range(0, len(sentences), sentence_per_block-1):
             block = sentences[i:i+sentence_per_block]
@@ -100,7 +113,8 @@ class TextRetriever:
 
             with TextRetriever.conn:
                 for s in block:
-                    TextRetriever.cur.execute("INSERT INTO sentence (document_id, chunk_id, content, start, end) VALUES (?, ?, ?, ?, ?)", (doc_id, chunk_id, s['content'], s['start'], s['end']))
+                    TextRetriever.cur.execute("INSERT INTO sentence (document_id, chunk_id, content, start, end, name, url) VALUES (?, ?, ?, ?, ?, ?, ?)", (
+                        doc_id, chunk_id, s['content'], s['start'], s['end'], document['name'], document['url']))
 
             chunks.append({
                 'content': context[block[0]['start']:block[-1]['end']],
@@ -112,17 +126,16 @@ class TextRetriever:
             TextRetriever.collection.add(
                 documents=[block['content']],
                 ids=[block['chunk_id']],
-                metadatas=[{'document_id': block['document_id'], 'chunk_id': block['chunk_id']}],
+                metadatas=[{'document_id': block['document_id'],
+                            'chunk_id': block['chunk_id']}],
             )
 
     @staticmethod
-    def search(query, min_doc_score=3 ,top_k_chunks=5):
-        
+    def search(query, min_doc_score=3, top_k_chunks=5):
+
         relevant_docs = TextRetriever.get_relevant_docs(query, min_doc_score)
         if not relevant_docs:
             return []
-        
-        
 
         results = TextRetriever.collection.query(
             query_texts=[query],
@@ -134,9 +147,12 @@ class TextRetriever:
 
             ids = results['ids'][0]
             placeholders = ', '.join(['?'] * len(ids))
-            TextRetriever.cur.execute(f"SELECT content, start, end FROM sentence WHERE chunk_id IN ({placeholders})", ids)
-            sentences = {str(s[1]): {'content': s[0], 'start': s[1], 'end': s[2]} for s in TextRetriever.cur.fetchall()}
+            TextRetriever.cur.execute(
+                f"SELECT content, start, end, name, url FROM sentence WHERE chunk_id IN ({placeholders})", ids)
+            sentences = {str(s[1]): {'content': s[0], 'start': s[1], 'end': s[2], 'name': s[3], 'url': s[4]}
+                         for s in TextRetriever.cur.fetchall()}
 
         return [sentences[id] for id in sorted(sentences.keys())]
+
 
 TextRetriever.init()

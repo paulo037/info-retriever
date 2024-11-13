@@ -1,8 +1,10 @@
+import uuid
 import streamlit as st
-from st_click_detector import click_detector
-
 from longcite import LongCiteModel
-
+from longcite import TextRetriever
+import streamlit.components.v1 as components
+from streamlit_javascript import st_javascript
+TextRetriever.init()
 
 st.set_page_config(layout="wide", page_title="LongCite")
 
@@ -18,49 +20,111 @@ def load_model():
     return tokenizer, model
 
 
-# Styles
 st.markdown("""
 <style>
-    .block-container {
-                    padding-top: 1rem;
-                    padding-bottom: 0rem;
-                    padding-left: 5rem;
-                    padding-right: 5rem;
+  .block-container {
+          padding-top: 1rem;
+          padding-bottom: 0rem;
+          padding-left: 5rem;
+          padding-right: 5rem;
+  }
+  
+  .answer-container {
+          padding-top: 1rem;
+          padding-bottom: 0rem;
+          padding-left: 5rem;
+          padding-right: 5rem;
+          margin-bottom: 10rem;
+  }
+  
+  .main-title {
+    text-align: center;
+    font-size: 3.5rem;
+    color: #1a73e8;
+    margin: 4rem 0;
+    font-weight: bold;
+  }
+  .subtitle {
+    text-align: center;
+    color: #5f6368;
+    margin-bottom: 2rem;
+  }
+  .search-box {
+    width: 100%;
+    max-width: 600px;
+    margin: 0 auto;
+  }
+  .centered-text {
+    text-align: center;
+  }
+  .stButton>button {
+    background-color: #1a73e8;
+    color: white;
+    border-radius: 20px;
+    padding: 0.5rem 2rem;
+    border: none;
+  }
+  
+  /* Citation tooltip styles */
+  .citation-ref {
+    color: blue;
+    position: relative;
+    cursor: pointer;
+    text-decoration: none;
+  }
+  
+  .citation-numbers {
+    text-decoration:
     }
-    .main-title {
-        text-align: center;
-        font-size: 3.5rem;
-        color: #1a73e8;
-        margin: 4rem 0;
-        font-weight: bold;
+    
+    .citation-brackets {
+        text-decoration: none;
+        color: blue;
     }
-    .subtitle {
-        text-align: center;
-        color: #5f6368;
-        margin-bottom: 2rem;
+    
+    .citation-tooltip {
+        visibility: hidden;
+        position: absolute;
+        z-index: 1;
+        bottom: 100%;
+        left: 50%;
+        transform: translateX(-50%);
+        background-color: #EFF2F6;
+        color: black;
+        padding: 15px;
+        border-radius: 6px;
+        width: 300px;
+        max-height: 300px;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        opacity: 1;
+        transition: opacity 0.3s;
+        overflow: scroll;
     }
-    .search-box {
-        width: 100%;
-        max-width: 600px;
-        margin: 0 auto;
+    
+    .citation-ref:hover .citation-tooltip {
+        visibility: visible;
+        opacity: 1;
     }
-    .centered-text {
-        text-align: center;
+    
+
+    .citation-content {
+        margin: 5px 0;
+        font-size: 14px;
     }
-    .stButton>button {
-        background-color: #1a73e8;
-        color: white;
-        border-radius: 20px;
-        padding: 0.5rem 2rem;
-        border: none;
+    
+    .citation-metadata {
+        font-size: 12px;
+        color: #666;
+        margin-top: 5px;
     }
 </style>
+
+
+    
 """, unsafe_allow_html=True)
 
-# Main title
 st.markdown('<h1 class="main-title">LongCite</h1>', unsafe_allow_html=True)
 
-# Search interface
 col1, col2, col3 = st.columns([1, 2, 1])
 with col2:
     query = st.text_input(
@@ -70,7 +134,6 @@ with col2:
         submit = st.button("Search", use_container_width=True)
 
 
-# Citation rendering functions
 def process_text(text):
     special_char = {
         '&': '&amp;', '\'': '&apos;', '"': '&quot;',
@@ -81,92 +144,55 @@ def process_text(text):
     return text
 
 
-html_styles = """<style>
-    .reference { color: blue; text-decoration: underline; }
-    .highlight { background-color: yellow; }
-    .label { font-family: sans-serif; font-size: 16px; font-weight: bold; }
-    .Bold { font-weight: bold; }
-    .statement { background-color: lightgrey; }
-</style>"""
-
-
-def convert_to_html(statements, clicked=-1):
-    html = html_styles + '<br><span class="label">Answer:</span><br>\n'
-    all_cite_html = []
-    clicked_cite_html = None
-    idx = 0
+def convert_to_html(statements):
+    html = '<div class="answer-container">\n<span class="label"></span><br>\n'
 
     for i, js in enumerate(statements):
+        if not js['statement']:
+            continue
+
         statement, citations = process_text(js['statement']), js['citation']
-        html += f"""<span class="{'statement' if clicked == i else ''}">{statement}</span>"""
+        html += f"<span>{statement}</span>"
 
         if citations:
-            cite_html = []
-            idxs = []
-            for c in citations:
-                idx += 1
-                idxs.append(str(idx))
-                cite = '[Sentence: {}-{}\t|\tChar: {}-{}]<br>\n<span {}>{}</span>'.format(
-                    c['start_sentence_idx'], c['end_sentence_idx'],
-                    c['start_char_idx'], c['end_char_idx'],
-                    'class="highlight"' if clicked == i else "",
-                    process_text(c['cite'].strip())
-                )
-                cite_html.append(
-                    f"""<span><span class="Bold">Snippet [{idx}]:</span><br>{cite}</span>""")
+            citation_tooltips = []
+            citation_refs = []
 
-            all_cite_html.extend(cite_html)
-            html += """ <a href='#' class="reference" id={}>[{}]</a>""".format(
-                i, ','.join(idxs))
-        html += '\n'
+            for idx, c in enumerate(citations, 1):
+                cite_content = process_text(c['cite'].strip())
+                metadata = f"[Sentence: {c['start_sentence_idx']}-{c['end_sentence_idx']} | Char: {c['start_char_idx']}-{c['end_char_idx']} | url : {c['url']}]"
 
-        if clicked == i:
-            clicked_cite_html = html_styles + """<br><span class="label">Citations of current statement:</span><br>
-                <div style="overflow-y: auto; padding: 20px; border: 0px dashed black; border-radius: 6px; 
-                background-color: #EFF2F6;">{}</div>""".format("<br><br>\n".join(cite_html))
+                citation_tooltips.append(f"""
+                    <div class="citation-content">{cite_content}</div>
+                    <div class="citation-metadata">{metadata}</div>
+                """)
 
-    all_cite_html = html_styles + """<br><span class="label">All citations:</span><br>
-        <div style="overflow-y: auto; padding: 20px; border: 0px dashed black; border-radius: 6px; 
-        background-color: #EFF2F6;">{}</div>""".format("<br><br>\n".join(all_cite_html)
-                                                       .replace('<span class="highlight">', '<span>'))
+            tooltip_content = "<br>".join(citation_tooltips)
+            citation_numbers = ','.join(str(x)
+                                        for x in range(1, len(citations) + 1))
+            html += f""" <span class="citation-ref" onclick=" this.classList.toggle('ativa');">
+                        <span class="citation-brackets">[</span><span class="citation-numbers">{citation_numbers}</span><span class="citation-brackets">]</span>
+                        <span class="citation-tooltip" >{tooltip_content}</span>
+                    </span>"""
 
-    return html, all_cite_html, clicked_cite_html
+        html += "\n"
+
+    html += '</div>'
+
+    return html
 
 
 @st.fragment
 def render_answer(statements):
-    answer_html, all_cite_html, clicked_cite_html = convert_to_html(
-        statements,
-        clicked=st.session_state.get("last_clicked", -1)
-    )
+    answer_html = convert_to_html(statements)
+    st.markdown(answer_html, unsafe_allow_html=True)
 
-    col1, col2 = st.columns([4, 4])
-    with col1:
-        clicked = click_detector(answer_html)
-    with col2:
-        if clicked_cite_html:
-            st.html(clicked_cite_html)
-        st.html(all_cite_html)
 
-    if clicked != "":
-        clicked = int(clicked)
-        if "last_clicked" not in st.session_state or clicked != st.session_state["last_clicked"]:
-            st.session_state["last_clicked"] = clicked
-            st.rerun(scope='fragment')
-
-statements = """Resumo: FaceLita é um jogo inovador destinado a oferecer suporte a crianças com alexitimia, uma condição que se caracteriza
-pela dificuldade em identificar e expressar emoções de maneira apropriada, sendo especialmente prevalente em crianças
-diagnosticadas com Transtorno do Espectro Autista (TEA). Concebido como uma ferramenta auxiliar em intervenções clínicas,
-nosso principal objetivo é transformar o aprendizado das expressões faciais e emoções em uma jornada educativa e envolvente."""
-
-render_answer(statements)
-# Load model
 tokenizer, model = load_model()
 
 # Handle search
 if submit and query:
     with st.spinner('Searching through documents...'):
-
         result = model.query_longcite(
             query,
             tokenizer=tokenizer,
