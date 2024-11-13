@@ -1,10 +1,7 @@
-import uuid
 import streamlit as st
 from longcite import LongCiteModel
 from longcite import TextRetriever
-import streamlit.components.v1 as components
-from streamlit_javascript import st_javascript
-TextRetriever.init()
+
 
 st.set_page_config(layout="wide", page_title="LongCite")
 

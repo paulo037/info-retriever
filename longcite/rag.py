@@ -18,6 +18,7 @@ class TextRetriever:
     bm25: BM25Okapi
     documents: dict
     collection: Collection
+    inialized = False
 
     @staticmethod
     def init_bm25():
@@ -33,6 +34,9 @@ class TextRetriever:
 
     @staticmethod
     def init():
+        if  TextRetriever.inialized:
+          return
+        TextRetriever.inialized = True
         TextRetriever.cur.execute(
             '''CREATE TABLE IF NOT EXISTS sentence (id INTEGER PRIMARY KEY AUTOINCREMENT, document_id TEXT, chunk_id TEXT, content TEXT, start INTEGER, end INTEGER, url TEXT, name)''')
         TextRetriever.cur.execute(
