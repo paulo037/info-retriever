@@ -6,8 +6,16 @@ import uuid
 from rank_bm25 import BM25Okapi
 from nltk.tokenize import word_tokenize
 import nltk
+from typing import TypedDict
 nltk.download('punkt')
 nltk.download('punkt_tab')
+
+
+class Document(TypedDict):
+    id: str
+    name: str
+    content: str
+    url: str
 
 
 class TextRetriever:
@@ -23,45 +31,42 @@ class TextRetriever:
     @staticmethod
     def init_bm25():
         with TextRetriever.conn:
-            TextRetriever.cur.execute("SELECT * FROM document")
+            TextRetriever.cur.execute("SELECT id, content, name FROM document")
+            docs = TextRetriever.cur.fetchall()
             TextRetriever.documents = [
-                {"id": d[0], "name": d[1], "content": d[2], "url": d[3]} for d in TextRetriever.cur.fetchall()]
+                {"id": d[0], "name":d[2]} for d in docs]
 
-        contents = [d['content'] for d in TextRetriever.documents]
+        contents = [d[1] for d in docs]
         tokenized_corpus = [word_tokenize(doc) for doc in contents]
         if tokenized_corpus:
             TextRetriever.bm25 = BM25Okapi(tokenized_corpus)
 
     @staticmethod
     def init():
-        if  TextRetriever.inialized:
-          return
+        if TextRetriever.inialized:
+            return
         TextRetriever.inialized = True
         TextRetriever.cur.execute(
             '''CREATE TABLE IF NOT EXISTS sentence (id INTEGER PRIMARY KEY AUTOINCREMENT, document_id TEXT, chunk_id TEXT, content TEXT, start INTEGER, end INTEGER, url TEXT, name)''')
         TextRetriever.cur.execute(
-            '''CREATE TABLE IF NOT EXISTS document (id TEXT PRIMARY KEY, name TEXT, content TEXT, url TEXT)''')
+            '''CREATE TABLE IF NOT EXISTS document (id TEXT PRIMARY KEY, name TEXT, content TEXT, url TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
         TextRetriever.conn.commit()
         TextRetriever.collection = TextRetriever.client.get_or_create_collection(
             "chunks")
         TextRetriever.init_bm25()
 
     @staticmethod
-    def get_relevant_docs(query, min_doc_score=3):
+    def get_relevant_docs(query, min_doc_score):
         print(query)
         scores = TextRetriever.bm25.get_scores(word_tokenize(query))
-        print(scores)
-        relevant_docs = [d['id'] for d, s in zip(
-            TextRetriever.documents, scores) if s >= min_doc_score]
-        if not relevant_docs:
-            sorted_docs = sorted(
-                zip(TextRetriever.documents, scores), key=lambda x: x[1], reverse=True)
-            relevant_docs = [d['id'] for d, s in sorted_docs[:2]]
-
+        sorted_docs = sorted(zip(TextRetriever.documents, scores), key=lambda x: x[1], reverse=True)
+        relevant_docs = [d['id'] for d, s in sorted_docs[:10] if s > min_doc_score]
+        
+        print("\n".join([d['name'] for d,_ in sorted_docs[:10]]))
         return relevant_docs
 
     @staticmethod
-    def add_document(document, sentence_per_block=20):
+    def add_document(document: Document, sentence_per_block: int = 50, update_bm25 : bool = True) -> None:
         def text_split_by_punctuation(original_text, return_dict=False):
             text = original_text
             custom_sent_tokenizer = PunktSentenceTokenizer(text)
@@ -103,7 +108,9 @@ class TextRetriever:
         TextRetriever.cur.execute("INSERT INTO document (id, name, content, url) VALUES (?, ?, ?, ?)", (
             doc_id, document['name'], document['content'], document['url']))
         TextRetriever.conn.commit()
-        TextRetriever.init_bm25()
+        
+        if(update_bm25):
+          TextRetriever.init_bm25()
 
         context = document['content']
         sentences = text_split_by_punctuation(context, return_dict=True)
@@ -135,7 +142,7 @@ class TextRetriever:
             )
 
     @staticmethod
-    def search(query, min_doc_score=3, top_k_chunks=5):
+    def search(query, min_doc_score=7, top_k_chunks=5):
 
         relevant_docs = TextRetriever.get_relevant_docs(query, min_doc_score)
         if not relevant_docs:
@@ -157,6 +164,14 @@ class TextRetriever:
                          for s in TextRetriever.cur.fetchall()}
 
         return [sentences[id] for id in sorted(sentences.keys())]
+    
+    @staticmethod
+    def get_all_urls():
+        with TextRetriever.conn:
+            TextRetriever.cur.execute("SELECT url FROM document")
+            docs = TextRetriever.cur.fetchall()
+            return [d[0] for d in docs]
+      
 
 
 TextRetriever.init()
