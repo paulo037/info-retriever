@@ -18,6 +18,7 @@ class LongCiteModel():
         if history is None:
             history = []
         
+        print(query)
         history.append({"role": role, "content": query})
         response = self.model.create_chat_completion(
             history, **self.generation_args)['choices'][0]['message']['content']
@@ -34,10 +35,10 @@ class LongCiteModel():
 
 
             # Construir o prompt final com o contexto recuperado
-            prompt = '''Please answer the user's question based on the following document. '''+\
-                    '''When a sentence S in your response uses information from some chunks in the document (i.e., <C{s1}>-<C_{e1}>, <C{s2}>-<C{e2}>, ...), '''+\
-                    '''please append these chunk numbers to S in the format "<statement>{S}<cite>[{s1}-{e1}][{s2}-{e2}]...</cite></statement>". '''+\
-                    '''You must answer in portuguese-br.\n\n[Document Start]\n%s\n[Document End]\n\n%s''' % (splited_context, question)
+            prompt = '''Por favor, responda à pergunta do usuário com base no documento a seguir. ''' + \
+                    '''Quando uma frase S em sua resposta utilizar informações de alguns trechos do documento (ou seja, <C{s1}>-<C_{e1}>, <C{s2}>-<C{e2}>, ...), ''' + \
+                    '''por favor, adicione esses números de trechos à S no formato "<statement>{S}<cite>[{s1}-{e1}][{s2}-{e2}]...</cite></statement>". ''' + \
+                    '''Você deve responder em português-br.\n\n[Início do Documento]\n%s\n[Fim do Documento]\n\n%s''' % (splited_context, question)
 
             return prompt, sentences, splited_context
 
