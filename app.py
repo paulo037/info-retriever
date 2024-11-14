@@ -157,7 +157,7 @@ def convert_to_html(statements):
 
             for idx, c in enumerate(citations, 1):
                 cite_content = process_text(c['cite'].strip())
-                metadata = f"[Sentence: {c['start_sentence_idx']}-{c['end_sentence_idx']} | Char: {c['start_char_idx']}-{c['end_char_idx']} | url : {c['url']}]"
+                metadata = f"""[Sentence: {c['start_sentence_idx']}-{c['end_sentence_idx']} | Char: {c['start_char_idx']}-{c['end_char_idx']} | <a href="{c['url']}">Acessar</a>.]"""
 
                 citation_tooltips.append(f"""
                     <div class="citation-content">{cite_content}</div>

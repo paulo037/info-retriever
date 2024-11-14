@@ -62,7 +62,7 @@ class TextRetriever:
         sorted_docs = sorted(zip(TextRetriever.documents, scores), key=lambda x: x[1], reverse=True)
         relevant_docs = [d['id'] for d, s in sorted_docs[:10] if s > min_doc_score]
         
-        print("\n".join([d['name'] for d,_ in sorted_docs[:10]]))
+        print("\n".join([f"{d['name']}, {s}" for d,s in sorted_docs[:10]]))
         return relevant_docs
 
     @staticmethod
