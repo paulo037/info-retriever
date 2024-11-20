@@ -5,11 +5,11 @@ import re
 
 class LongCiteModel():
     def __init__(self, model):
-        self.model = Llama(model, n_ctx=8192 * 2, n_gpu_layers=-1)
+        self.model = Llama(model, n_ctx=8192 * 4, n_gpu_layers=-1)
         self.generation_args = {
-            "temperature": 0.95,
+            "temperature": 0.3,
             "top_p": 0.7,
-            "max_tokens": 1024,
+            "max_tokens": 2048,
             "stop": ["<|user|>", "<|observation|>"],
         }
 
@@ -30,7 +30,7 @@ class LongCiteModel():
         def get_prompt(question):
             
             sentences = TextRetriever.search(question)
-
+            question = f"[responda em português-br] {question}"
             splited_context =  "".join([f"<C{i}>"+s['content'] for i, s in enumerate(sentences)])
 
 
