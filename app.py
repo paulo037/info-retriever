@@ -8,7 +8,7 @@ st.set_page_config(layout="wide", page_title="LongCite")
 
 @st.cache_resource
 def load_model():
-    model_path = "models/LongCite-llama3.1-8B-Q4_K_M.gguf"
+    model_path = "models/LongCite-llama3.1-8B-Q8_0.gguf"
     tokenizer_path = "THUDM/LongCite-llama3.1-8b"
     model = LongCiteModel(model=model_path)
     from transformers import AutoTokenizer

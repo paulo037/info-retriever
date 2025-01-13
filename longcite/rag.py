@@ -7,6 +7,10 @@ from rank_bm25 import BM25Okapi
 from nltk.tokenize import word_tokenize
 import nltk
 from typing import TypedDict
+from chromadb.utils import embedding_functions
+import torch
+
+device = 'cuda' if torch.cuda.is_available() else 'cpu'
 nltk.download('punkt')
 nltk.download('punkt_tab')
 
@@ -34,7 +38,7 @@ class TextRetriever:
             TextRetriever.cur.execute("SELECT id, content, name FROM document")
             docs = TextRetriever.cur.fetchall()
             TextRetriever.documents = [
-                {"id": d[0], "name":d[2]} for d in docs]
+                {"id": d[0], "name": d[2]} for d in docs]
 
         contents = [d[1] for d in docs]
         tokenized_corpus = [word_tokenize(doc) for doc in contents]
@@ -51,22 +55,26 @@ class TextRetriever:
         TextRetriever.cur.execute(
             '''CREATE TABLE IF NOT EXISTS document (id TEXT PRIMARY KEY, name TEXT, content TEXT, url TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
         TextRetriever.conn.commit()
+        sentence_transformer_ef = embedding_functions.SentenceTransformerEmbeddingFunction(
+            model_name="dunzhang/stella_en_1.5B_v5", device=device)
         TextRetriever.collection = TextRetriever.client.get_or_create_collection(
-            "chunks")
+            "chunks2", embedding_function=sentence_transformer_ef)
         TextRetriever.init_bm25()
 
     @staticmethod
     def get_relevant_docs(query, min_doc_score):
         print(query)
         scores = TextRetriever.bm25.get_scores(word_tokenize(query))
-        sorted_docs = sorted(zip(TextRetriever.documents, scores), key=lambda x: x[1], reverse=True)
-        relevant_docs = [d['id'] for d, s in sorted_docs[:10] if s > min_doc_score]
-        
-        print("\n".join([f"{d['name']}, {s}" for d,s in sorted_docs[:10]]))
+        sorted_docs = sorted(
+            zip(TextRetriever.documents, scores), key=lambda x: x[1], reverse=True)
+        relevant_docs = [d['id']
+                         for d, s in sorted_docs[:10] if s > min_doc_score]
+
+        print("\n".join([f"{d['name']}, {s}" for d, s in sorted_docs[:10]]))
         return relevant_docs
 
     @staticmethod
-    def add_document(document: Document, sentence_per_block: int = 50, update_bm25 : bool = True) -> None:
+    def add_document(document: Document, sentence_per_block: int = 50, update_bm25: bool = True) -> None:
         def text_split_by_punctuation(original_text, return_dict=False):
             text = original_text
             custom_sent_tokenizer = PunktSentenceTokenizer(text)
@@ -108,9 +116,9 @@ class TextRetriever:
         TextRetriever.cur.execute("INSERT INTO document (id, name, content, url) VALUES (?, ?, ?, ?)", (
             doc_id, document['name'], document['content'], document['url']))
         TextRetriever.conn.commit()
-        
-        if(update_bm25):
-          TextRetriever.init_bm25()
+
+        if (update_bm25):
+            TextRetriever.init_bm25()
 
         context = document['content']
         sentences = text_split_by_punctuation(context, return_dict=True)
@@ -143,15 +151,15 @@ class TextRetriever:
 
     @staticmethod
     def search(query, min_doc_score=7, top_k_chunks=5):
-
-        relevant_docs = TextRetriever.get_relevant_docs(query, min_doc_score)
-        if not relevant_docs:
-            return []
+        TextRetriever.init()
+        # relevant_docs = TextRetriever.get_relevant_docs(query, min_doc_score)
+        # if not relevant_docs:
+        #     return []
 
         results = TextRetriever.collection.query(
             query_texts=[query],
             n_results=top_k_chunks,
-            where={"document_id": {"$in": relevant_docs}}
+            # where={"document_id": {"$in": relevant_docs}}
         )
 
         with TextRetriever.conn:
@@ -159,19 +167,18 @@ class TextRetriever:
             ids = results['ids'][0]
             placeholders = ', '.join(['?'] * len(ids))
             TextRetriever.cur.execute(
-                f"SELECT content, start, end, name, url FROM sentence WHERE chunk_id IN ({placeholders})", ids)
-            sentences = {str(s[1]): {'content': s[0], 'start': s[1], 'end': s[2], 'name': s[3], 'url': s[4]}
+                f"SELECT content, start, end, name, url, document_id FROM sentence WHERE chunk_id IN ({placeholders})", ids)
+            sentences = {str(s[1]): {'content': s[0], 'start': s[1], 'end': s[2], 'name': s[3], 'url': s[4], 'document_id': s[5]}
                          for s in TextRetriever.cur.fetchall()}
 
         return [sentences[id] for id in sorted(sentences.keys())]
-    
+
     @staticmethod
     def get_all_urls():
         with TextRetriever.conn:
             TextRetriever.cur.execute("SELECT url FROM document")
             docs = TextRetriever.cur.fetchall()
             return [d[0] for d in docs]
-      
 
 
 TextRetriever.init()

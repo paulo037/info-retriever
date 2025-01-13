@@ -143,7 +143,8 @@ class LongCiteModel():
                 return prompt
 
         prompt, sents, splited_context = get_prompt(query)
-
+        ids  = [s['document_id'] for s in sents]
+        
         prompt = truncate_from_middle(prompt, None, tokenizer)
 
         output, _ = self.chat(tokenizer, prompt, history=[],
@@ -151,4 +152,4 @@ class LongCiteModel():
 
         result = postprocess(output, sents, splited_context)
         
-        return result
+        return result, ids
