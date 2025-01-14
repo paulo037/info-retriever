@@ -1,19 +1,23 @@
 import streamlit as st
 from longcite import LongCiteModel
 from longcite import TextRetriever
+from dotenv import load_dotenv
+import os
+load_dotenv()
 
+MODEL_PATH = os.getenv('MODEL_PATH')
+TOKENIZER_PATH = os.getenv('TOKENIZER_PATH')
 
 st.set_page_config(layout="wide", page_title="LongCite")
 
 
 @st.cache_resource
 def load_model():
-    model_path = "models/LongCite-llama3.1-8B-Q8_0.gguf"
-    tokenizer_path = "THUDM/LongCite-llama3.1-8b"
-    model = LongCiteModel(model=model_path)
+
+    model = LongCiteModel(model=MODEL_PATH)
     from transformers import AutoTokenizer
-    tokenizer = AutoTokenizer.from_pretrained(
-        tokenizer_path, trust_remote_code=True)
+
+    tokenizer = AutoTokenizer.from_pretrained(TOKENIZER_PATH, trust_remote_code=True)
     return tokenizer, model
 
 

@@ -9,6 +9,14 @@ import nltk
 from typing import TypedDict
 from chromadb.utils import embedding_functions
 import torch
+from dotenv import load_dotenv
+import os
+
+
+load_dotenv()
+
+CHROMA_DB_PATH = os.getenv('CHROMA_DB_PATH')
+SQLITE_DB_PATH = os.getenv('SQLITE_DB_PATH')
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 nltk.download('punkt')
@@ -23,9 +31,8 @@ class Document(TypedDict):
 
 
 class TextRetriever:
-    client: PersistentClient = PersistentClient(path='db/chroma_db')
-    conn: sqlite3.Connection = sqlite3.connect(
-        'db/rag_db.sqlite3', check_same_thread=False)
+    client: PersistentClient = PersistentClient(path=CHROMA_DB_PATH)
+    conn: sqlite3.Connection = sqlite3.connect(SQLITE_DB_PATH, check_same_thread=False)
     cur: sqlite3.Cursor = conn.cursor()
     bm25: BM25Okapi
     documents: dict
